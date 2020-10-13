@@ -1,0 +1,111 @@
+/*
+ * LCD_Play.c
+ *
+ * Created: 10/3/2020 9:35:04 PM
+ * Author : isabell
+ */ 
+
+#include <avr/io.h>
+#include "lcd.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define F_CPU 16000000
+#include <util/delay.h>
+
+extern void lcd_backlight(char on);
+
+#define LOWER_threshold 430
+#define UPPER_threshold 500
+
+uint8_t step = 0;
+char buffer[10];
+int accelSet_Up();
+
+int main(void)
+{
+	DDRC &= (0b11111000); //set pinc [0:2] to be inputs
+	PORTC &= (0b11111000); //bit masking to preserve lower three bits 
+	//DDRE &= ~((1 << PINE1) | (1 << PINE0)); 
+	DDRE &= (0b11111100); //input is 0 for bits 0 and 1
+	PORTE |= (0b00000011); //enable pull up resistors to read in from pine 0 and 1
+	
+	lcd_init(LCD_ON_DISPLAY);
+	lcd_backlight(0);
+	_delay_ms(500);
+	lcd_backlight(1);
+	
+	//on every clear screen delay 10 ms for accuracy
+	lcd_clrscr();
+	_delay_ms(10);
+	
+	//step = 0;
+
+	while(1)
+	{
+		itoa(step, buffer, 10);
+		lcd_puts("STEPS: ");
+		lcd_puts(buffer);
+
+// 		lcd_gotoxy(0,2);
+// 		lcd_puts("DISTANCE: ");
+		accelSet_Up();
+	}
+}
+
+uint16_t AnalogRead16(uint8_t channel)
+{
+	ADMUX = (0b01<<REFS0) | (0<<ADLAR) | (channel<<MUX0);
+	ADCSRA = (1<<ADEN) | (0<<ADSC) | (0<<ADATE) | (0<<ADIE) | (0b111<<ADPS0);
+	ADCSRB = (0b000<<ADTS0);
+	ADCSRA |= (1<<ADSC);
+	while((ADCSRA & (1<<ADIF)) == 0)
+		;
+	return ADC;
+}
+
+int accelSet_Up()
+{
+	double x[10], y[10], z[10];
+	double averageX = 0;
+	double averageY = 0;
+	double averageZ = 0;
+	double magAccel = 0;
+	uint8_t i;
+	
+	for (i = 0; i < 10; i++)
+	{
+		x[i] = AnalogRead16(0); //x coordinate = PC0
+		//_delay_ms(100);
+		y[i] = AnalogRead16(1); //y coordinate = PC1
+		//_delay_ms(100);
+		z[i] = AnalogRead16(2); //z coordinate = PC2
+		_delay_ms(100);
+	}
+		
+	for (i = 0; i < 10; i++)
+	{
+		averageX = averageX + x[i];
+		averageY = averageY + y[i];
+		averageZ = averageZ + z[i];
+	}
+	
+	averageX = 1.2*(averageX/10);
+	averageY = 1.2*(averageY/10);
+	averageZ = 0.2*(averageZ/10);
+	
+	magAccel = sqrt(pow(averageX,2) + pow(averageY,2));// + pow(averageZ,2));
+	
+	if((magAccel > LOWER_threshold) && (magAccel < UPPER_threshold))
+		step = step + 1;
+	else 
+		step = step + 0;
+	
+	lcd_clrscr();
+	_delay_ms(10);
+
+	return step;
+}
+	
