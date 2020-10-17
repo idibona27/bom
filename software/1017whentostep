@@ -1,0 +1,199 @@
+/*
+ * LCD_Play.c
+ *
+ * Created: 10/3/2020 10:27:31 AM
+ * Author : isabella dibona
+ */ 
+
+#include <avr/io.h>
+#include "lcd.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#define F_CPU 16000000
+#include <util/delay.h>
+
+extern void lcd_backlight(char on);
+
+// #define LOWER_threshold 400
+// #define UPPER_threshold 600
+
+/****prototype functions****/
+uint8_t setUpperandLower();
+uint8_t accelInitialize();
+void checkBattery_status();
+uint8_t checkFor_newStep();
+uint16_t AnalogRead16(uint8_t channel);
+/****************************/
+
+/*****initialize globals*****/
+uint16_t step = 0;
+uint16_t findInitialXcoord[5];
+uint16_t findInitialYcoord[5];
+uint16_t LOWER_threshold = 0;
+uint16_t UPPER_threshold = 0;
+uint8_t batteryLevel = 0;
+double thresholdMagnitude = 0;
+double averageInitialX = 0;
+double averageInitialY = 0;
+double voltageLevel = 0;
+double magAccel = 0;
+double previous_Magnitude = 0; 
+double new_Magnitude[5]; 
+char buffer[10], suffer[4];
+/***************************/
+
+
+int main(void)
+{
+	DDRC &= (0b11110000); //set pinc [0:3] to be inputs
+	PORTC &= (0b11110000); //bit masking to preserve lower four bits 
+	DDRE &= (0b11111100); //input is 0 for bits 0 and 1
+	PORTE |= (0b00000011); //enable pull up resistors to read in from pine 0 and 1
+	
+	lcd_init(LCD_ON_DISPLAY);
+	lcd_backlight(0);
+	_delay_ms(100);
+	lcd_backlight(1);
+	
+	//on every clear screen delay 10 ms for accuracy
+	lcd_clrscr();
+	_delay_ms(10);
+	setUpperandLower();
+
+	while(1)
+	{
+		itoa(step, buffer, 10);
+		lcd_puts("STEPS: ");
+		lcd_puts(buffer);
+				
+		checkBattery_status();
+		checkFor_newStep();
+		
+		lcd_clrscr();
+		_delay_ms(10);
+	}
+}
+
+//set upper and lower limits --> type of calibration
+
+uint8_t setUpperandLower()
+{		
+	for (int i = 0; i < 5; i++)
+	{
+		findInitialXcoord[i] = AnalogRead16(0); //READ DELTA X
+		findInitialYcoord[i] = AnalogRead16(1); //READ DELTA Y
+		averageInitialX = averageInitialX + findInitialXcoord[i];
+		averageInitialY = averageInitialY + findInitialYcoord[i];		
+	}
+	
+	averageInitialX = averageInitialX/5;
+	averageInitialY = averageInitialY/5;
+	
+	thresholdMagnitude = sqrt(pow(averageInitialX,2) + pow(averageInitialY,2));
+	
+	LOWER_threshold = 0.95*thresholdMagnitude;
+	UPPER_threshold = 1.13*thresholdMagnitude;
+	
+	return LOWER_threshold;
+	return UPPER_threshold;
+}
+
+// convert voltage readings from accelerometer and battery into digital values
+
+uint16_t AnalogRead16(uint8_t channel)
+{
+	ADMUX = (0b01<<REFS0) | (0<<ADLAR) | (channel<<MUX0);
+	ADCSRA = (1<<ADEN) | (0<<ADSC) | (0<<ADATE) | (0<<ADIE) | (0b111<<ADPS0);
+	ADCSRB = (0b000<<ADTS0);
+	ADCSRA |= (1<<ADSC);
+	while((ADCSRA & (1<<ADIF)) == 0)
+		;
+	return ADC;
+}
+
+// check for battery level/status
+
+void checkBattery_status()
+{
+	voltageLevel = AnalogRead16(3);
+	batteryLevel = voltageLevel/1023*100;
+	
+	itoa(batteryLevel, suffer, 10);
+	lcd_gotoxy(0,2);
+	lcd_puts("Battery:     %");
+	lcd_gotoxy(9,2);
+	lcd_puts(suffer);
+}
+
+//get current state of accelerometer, poll for current magnitude
+
+uint8_t accelInitialize()
+{
+	double x[5], y[5];// z[5];
+	double averageX = 0;
+	double averageY = 0;
+	//double averageZ = 0;
+	uint8_t i;
+	
+	for (i = 0; i < 5; i++)
+	{
+		x[i] = AnalogRead16(0); //x coordinate = PC0
+		//_delay_ms(100);
+		y[i] = AnalogRead16(1); //y coordinate = PC1
+		//_delay_ms(100);
+	}
+		
+	for (i = 0; i < 5; i++)
+	{
+		averageX = averageX + x[i];
+		averageY = averageY + y[i];
+	}
+	
+	averageX = (averageX/5);
+	averageY = (averageY/5);
+	
+	_delay_ms(100);
+	
+	magAccel = sqrt(pow(averageX,2) + pow(averageY,2));
+	
+	return magAccel;
+}
+
+//check if magnitude increased after incrementing step by one, this will ensure
+//the counter does NOT just continuously increase in one position
+
+uint8_t checkFor_newStep()
+{
+	double averageNew = 0;
+	
+	accelInitialize();
+	previous_Magnitude = magAccel;
+	
+	if((magAccel > LOWER_threshold) && (magAccel < UPPER_threshold)) //first resting condition check if movement from rest
+	{
+		for (int i = 0; i < 5; i++)
+		{
+			accelInitialize();
+			new_Magnitude[i] = magAccel; //get average of new magnitude
+			averageNew = averageNew + new_Magnitude[i];
+		}
+		
+		_delay_ms(100);
+		averageNew = averageNew/5; //new magnitude average over 5 samples
+		
+		if (((averageNew < 0.98*previous_Magnitude) | (averageNew > 1.03*previous_Magnitude)) && ((averageNew > LOWER_threshold) && (averageNew < UPPER_threshold)))
+			step = step + 1;
+		else 
+			step = step + 0;
+		
+	} 
+	
+	else
+		step = step + 0;
+
+	return step;	
+}
+	
