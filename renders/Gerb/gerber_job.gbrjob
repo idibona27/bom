@@ -1,7 +1,7 @@
 {
     "Header": {
         "Comment": "All values are metric (mm)",
-        "CreationDate": "2020-11-11T05:54:47Z",
+        "CreationDate": "2020-11-11T23:53:57Z",
         "GenerationSoftware": {
             "Application": "EAGLE",
             "Vendor": "Autodesk",
@@ -13,7 +13,7 @@
         "BoardThickness": 1.57,
         "LayerNumber": 2,
         "Name": {
-            "ProjectId": "schem_2"
+            "ProjectId": "pedometer"
         },
         "Owner": "Isabella Di Bona <idibona@umassd.edu>",
         "Size": {
