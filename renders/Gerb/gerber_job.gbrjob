@@ -1,7 +1,7 @@
 {
     "Header": {
         "Comment": "All values are metric (mm)",
-        "CreationDate": "2020-11-09T18:21:56Z",
+        "CreationDate": "2020-11-11T05:54:47Z",
         "GenerationSoftware": {
             "Application": "EAGLE",
             "Vendor": "Autodesk",
@@ -17,8 +17,8 @@
         },
         "Owner": "Isabella Di Bona <idibona@umassd.edu>",
         "Size": {
-            "X": 31.42,
-            "Y": 25.771
+            "X": 31.948713,
+            "Y": 26.549809
         }
     }
 }
